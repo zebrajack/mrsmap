@@ -54,7 +54,7 @@
 
 using namespace mrsmap;
 
-typedef MultiResolutionColorSurfelMap MultiResolutionSurfelMap;
+//typedef MultiResolutionColorSurfelMap MultiResolutionSurfelMap;
 
 // parses Juergen Sturm's datasets (tgz archives + timestamp associations)
 // simply takes the base path of the dataset
