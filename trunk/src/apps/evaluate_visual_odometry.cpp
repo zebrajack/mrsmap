@@ -135,7 +135,7 @@ public:
 
 		}
 
-		transform.setIdentity();
+//		transform.setIdentity();
 
 		lastFrameMap_ = currFrameMap;
 		lastTransform_ = transform;
