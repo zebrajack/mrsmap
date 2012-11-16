@@ -82,6 +82,12 @@ public:
 		double weight;
 		int match;
 
+		// for Levenberg-Marquardt
+		// (z - f)^T W (z - f)
+		Eigen::Vector3d z, f; //, df_qx, df_qy, df_qz;
+		Eigen::Matrix< double, 3, 6 > df_dx;
+		Eigen::Matrix3d W;
+
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	};
@@ -130,6 +136,8 @@ public:
 	bool estimateTransformationGradientDescent( MultiResolutionColorSurfelMap& source, MultiResolutionColorSurfelMap& target, Eigen::Matrix4d& transform, float startResolution, float stopResolution,
 			pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints, SurfelAssociationList* associations,
 			int maxIterations );
+	bool estimateTransformationLevenbergMarquardt( MultiResolutionColorSurfelMap& source, MultiResolutionColorSurfelMap& target, Eigen::Matrix4d& transform, float startResolution, float stopResolution, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints, int maxIterations );
+
 
 	bool estimateTransformation( MultiResolutionColorSurfelMap& source, const boost::shared_ptr< const pcl::PointCloud< pcl::PointXYZRGB > >& cloud,
 			const boost::shared_ptr< const std::vector< int > >& indices, Eigen::Matrix4d& transform, float startResolution, float stopResolution,

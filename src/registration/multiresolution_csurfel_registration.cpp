@@ -1337,6 +1337,197 @@ public:
 
 };
 
+
+class GradientFunctorLM {
+public:
+
+
+	GradientFunctorLM( MultiResolutionColorSurfelRegistration::SurfelAssociationList* assocList, double tx, double ty, double tz, double qx, double qy, double qz, double qw, bool derivs ) {
+
+		derivs_ = derivs;
+
+		assocList_ = assocList;
+
+		currentTransform.setIdentity();
+		currentTransform.block<3,3>(0,0) = Eigen::Matrix3d( Eigen::Quaterniond( qw, qx, qy, qz ) );
+		currentTransform(0,3) = tx;
+		currentTransform(1,3) = ty;
+		currentTransform(2,3) = tz;
+
+		currentRotation = Eigen::Matrix3d( currentTransform.block<3,3>(0,0) );
+		currentRotationT = currentRotation.transpose();
+		currentTranslation = Eigen::Vector3d( currentTransform.block<3,1>(0,3) );
+
+		if( derivs ) {
+
+			const double inv_qw = 1.0 / qw;
+
+			// build up derivatives of rotation and translation for the transformation variables
+			dt_tx(0) = 1.f; dt_tx(1) = 0.f; dt_tx(2) = 0.f;
+			dt_ty(0) = 0.f; dt_ty(1) = 1.f; dt_ty(2) = 0.f;
+			dt_tz(0) = 0.f; dt_tz(1) = 0.f; dt_tz(2) = 1.f;
+
+			// matrix(
+			//  [ 0,
+			//    2*((qx*qz)/sqrt(-qz^2-qy^2-qx^2+1)+qy),
+			//    2*(qz-(qx*qy)/sqrt(-qz^2-qy^2-qx^2+1)) ],
+			//  [ 2*(qy-(qx*qz)/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    -4*qx,
+			//    2*(qx^2/sqrt(-qz^2-qy^2-qx^2+1)-sqrt(-qz^2-qy^2-qx^2+1)) ],
+			//  [ 2*((qx*qy)/sqrt(-qz^2-qy^2-qx^2+1)+qz),
+			//    2*(sqrt(-qz^2-qy^2-qx^2+1)-qx^2/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    -4*qx ]
+			// )
+			dR_qx(0,0) = 0.0;
+			dR_qx(0,1) = 2.0*((qx*qz)*inv_qw+qy);
+			dR_qx(0,2) = 2.0*(qz-(qx*qy)*inv_qw);
+			dR_qx(1,0) = 2.0*(qy-(qx*qz)*inv_qw);
+			dR_qx(1,1) = -4.0*qx;
+			dR_qx(1,2) = 2.0*(qx*qx*inv_qw-qw);
+			dR_qx(2,0) = 2.0*((qx*qy)*inv_qw+qz);
+			dR_qx(2,1) = 2.0*(qw-qx*qx*inv_qw);
+			dR_qx(2,2) = -4.0*qx;
+
+			// matrix(
+			//  [ -4*qy,
+			//    2*((qy*qz)/sqrt(-qz^2-qy^2-qx^2+1)+qx),
+			//    2*(sqrt(-qz^2-qy^2-qx^2+1)-qy^2/sqrt(-qz^2-qy^2-qx^2+1)) ],
+			//  [ 2*(qx-(qy*qz)/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    0,
+			//    2*((qx*qy)/sqrt(-qz^2-qy^2-qx^2+1)+qz) ],
+			//  [ 2*(qy^2/sqrt(-qz^2-qy^2-qx^2+1)-sqrt(-qz^2-qy^2-qx^2+1)),
+			//    2*(qz-(qx*qy)/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    -4*qy ]
+			// )
+
+			dR_qy(0,0) = -4.0*qy;
+			dR_qy(0,1) = 2.0*((qy*qz)*inv_qw+qx);
+			dR_qy(0,2) = 2.0*(qw-qy*qy*inv_qw);
+			dR_qy(1,0) = 2.0*(qx-(qy*qz)*inv_qw);
+			dR_qy(1,1) = 0.0;
+			dR_qy(1,2) = 2.0*((qx*qy)*inv_qw+qz);
+			dR_qy(2,0) = 2.0*(qy*qy*inv_qw-qw);
+			dR_qy(2,1) = 2.0*(qz-(qx*qy)*inv_qw);
+			dR_qy(2,2) = -4.0*qy;
+
+			// matrix(
+			//  [ -4*qz,
+			//    2*(qz^2/sqrt(-qz^2-qy^2-qx^2+1)-sqrt(-qz^2-qy^2-qx^2+1)),
+			//    2*(qx-(qy*qz)/sqrt(-qz^2-qy^2-qx^2+1)) ],
+			//  [ 2*(sqrt(-qz^2-qy^2-qx^2+1)-qz^2/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    -4*qz,
+			//    2*((qx*qz)/sqrt(-qz^2-qy^2-qx^2+1)+qy) ],
+			//  [ 2*((qy*qz)/sqrt(-qz^2-qy^2-qx^2+1)+qx),
+			//    2*(qy-(qx*qz)/sqrt(-qz^2-qy^2-qx^2+1)),
+			//    0 ]
+			// )
+			dR_qz(0,0) = -4.0*qz;
+			dR_qz(0,1) = 2.0*(qz*qz*inv_qw-qw);
+			dR_qz(0,2) = 2.0*(qx-(qy*qz)*inv_qw);
+			dR_qz(1,0) = 2.0*(qw-qz*qz*inv_qw);
+			dR_qz(1,1) = -4.0*qz;
+			dR_qz(1,2) = 2.0*((qx*qz)*inv_qw+qy);
+			dR_qz(2,0) = 2.0*((qy*qz)*inv_qw+qx);
+			dR_qz(2,1) = 2.0*(qy-(qx*qz)*inv_qw);
+			dR_qz(2,2) = 0.0;
+
+		}
+
+	}
+
+	~GradientFunctorLM() {}
+
+
+	void operator()( const tbb::blocked_range<size_t>& r ) const {
+		for( size_t i=r.begin(); i!=r.end(); ++i )
+			(*this)((*assocList_)[i]);
+	}
+
+
+
+	void operator()( MultiResolutionColorSurfelRegistration::SurfelAssociation& assoc ) const {
+
+
+		if( assoc.match == 0 || !assoc.src_->applyUpdate_ || !assoc.dst_->applyUpdate_ ) {
+			assoc.match = 0;
+			return;
+		}
+
+
+//		const float processResolution = assoc.n_src_->resolution();
+
+		// spatial component, marginalized
+//		Eigen::Matrix3d cov_ss_add = Eigen::Matrix3d::Zero();
+//		if( ADD_SMOOTH_POS_COVARIANCE ) {
+//			cov_ss_add.setIdentity();
+//			cov_ss_add *= SMOOTH_SURFACE_COV_FACTOR * processResolution*processResolution;
+//		}
+
+		const Eigen::Matrix3d cov1_ss = assoc.dst_->cov_.block<3,3>(0,0);// + cov_ss_add;
+		const Eigen::Matrix3d cov2_ss = assoc.src_->cov_.block<3,3>(0,0);// + cov_ss_add;
+
+		const Eigen::Vector3d dstMean = assoc.dst_->mean_.block<3,1>(0,0);
+		const Eigen::Vector3d srcMean = assoc.src_->mean_.block<3,1>(0,0);
+
+		Eigen::Vector4d pos;
+		pos.block<3,1>(0,0) = srcMean;
+		pos(3,0) = 1.f;
+
+		const Eigen::Vector4d pos_src = currentTransform * pos;
+
+		const Eigen::Vector3d p_s = pos_src.block<3,1>(0,0);
+		const Eigen::Vector3d diff_s = dstMean - p_s;
+
+		const Eigen::Matrix3d cov_ss = INTERPOLATION_COV_FACTOR * (cov1_ss + currentRotation * cov2_ss * currentRotationT);
+		const Eigen::Matrix3d invcov_ss = cov_ss.inverse();
+
+		assoc.error = diff_s.dot(invcov_ss * diff_s);
+
+		assoc.z = dstMean;
+		assoc.f = p_s;
+
+		if( derivs_ ) {
+
+			assoc.df_dx.block<3,1>(0,0) = dt_tx;
+			assoc.df_dx.block<3,1>(0,1) = dt_ty;
+			assoc.df_dx.block<3,1>(0,2) = dt_tz;
+			assoc.df_dx.block<3,1>(0,3) = dR_qx * srcMean;
+			assoc.df_dx.block<3,1>(0,4) = dR_qy * srcMean;
+			assoc.df_dx.block<3,1>(0,5) = dR_qz * srcMean;
+
+			assoc.W = invcov_ss;
+
+		}
+
+
+		assoc.match = 1;
+
+//		assert( !isnan(assoc.error) );
+
+
+	}
+
+
+
+	Eigen::Matrix4d currentTransform;
+
+	Eigen::Vector3d currentTranslation;
+	Eigen::Vector3d dt_tx, dt_ty, dt_tz;
+
+	Eigen::Matrix3d currentRotation, currentRotationT;
+	Eigen::Matrix3d dR_qx, dR_qy, dR_qz;
+
+
+	MultiResolutionColorSurfelRegistration::SurfelAssociationList* assocList_;
+
+	bool derivs_;
+
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+};
+
+
+
 bool registrationErrorFunctionWithFirstDerivative( const Eigen::Matrix< double, 6, 1 >& x, const Eigen::Matrix4d& initTransform, void* params, double* f, Eigen::Matrix< double, 6, 1 >& df,
 		MultiResolutionColorSurfelRegistration::SurfelAssociationList& surfelAssociations ) {
 
@@ -1565,6 +1756,226 @@ bool registrationErrorFunctionWithFirstAndSecondDerivative( const Eigen::Matrix<
 	return true;
 
 }
+
+bool registrationErrorFunctionLM( const Eigen::Matrix< double, 6, 1 >& x, const Eigen::Matrix4d& initTransform, MultiResolutionColorSurfelRegistration::RegistrationFunctionParameters& params, double& f, MultiResolutionColorSurfelRegistration::SurfelAssociationList& surfelAssociations ) {
+
+	double sumError = 0.0;
+	double sumWeight = 0.0;
+
+	const double tx = x( 0 );
+	const double ty = x( 1 );
+	const double tz = x( 2 );
+	const double qx = x( 3 );
+	const double qy = x( 4 );
+	const double qz = x( 5 );
+	if( qx*qx+qy*qy+qz*qz > 1.0 )
+		std::cout << "quaternion not stable!!\n";
+	const double qw = params.lastWSign * sqrtf(1.0-qx*qx-qy*qy-qz*qz); // retrieve sign from last qw
+
+	GradientFunctorLM gf( &surfelAssociations, tx, ty, tz, qx, qy, qz, qw, false );
+
+	if( PARALLEL )
+		tbb::parallel_for( tbb::blocked_range<size_t>(0,surfelAssociations.size()), gf );
+	else
+		std::for_each( surfelAssociations.begin(), surfelAssociations.end(), gf );
+
+	int cidx = 0;
+	if( params.correspondences_source_points_ ) {
+		params.correspondences_source_points_->points.resize(surfelAssociations.size());
+		params.correspondences_target_points_->points.resize(surfelAssociations.size());
+	}
+
+
+	double numMatches = 0;
+	for( MultiResolutionColorSurfelRegistration::SurfelAssociationList::iterator it = surfelAssociations.begin(); it != surfelAssociations.end(); ++it ) {
+
+		if( !it->match )
+			continue;
+
+
+		float nweight = it->n_src_->value_.assocWeight_ * it->n_dst_->value_.assocWeight_;
+		float weight = nweight * it->weight;
+
+		sumError += weight * it->error;
+		sumWeight += weight;
+		numMatches += 1.0;//nweight;
+
+
+
+		if( params.correspondences_source_points_ ) {
+
+			pcl::PointXYZ& p1 = params.correspondences_source_points_->points[cidx];
+			pcl::PointXYZ& p2 = params.correspondences_target_points_->points[cidx];
+
+			Eigen::Vector4f pos1 = it->n_dst_->getCenterPosition();
+			Eigen::Vector4f pos2 = it->n_src_->getCenterPosition();
+
+			p1.x = pos1(0);
+			p1.y = pos1(1);
+			p1.z = pos1(2);
+
+
+//			p1.x = it->dst_->mean_[0];
+//			p1.y = it->dst_->mean_[1];
+//			p1.z = it->dst_->mean_[2];
+
+			Eigen::Vector4d pos;
+			pos.block<3,1>(0,0) = pos2.block<3,1>(0,0).cast<double>();
+//			pos.block<3,1>(0,0) = it->src_->mean_.block<3,1>(0,0);
+			pos(3,0) = 1.f;
+
+			const Eigen::Vector4d pos_src = gf.currentTransform * pos;
+
+			p2.x = pos_src[0];
+			p2.y = pos_src[1];
+			p2.z = pos_src[2];
+
+			cidx++;
+		}
+
+	}
+
+
+	if( params.correspondences_source_points_ ) {
+		params.correspondences_source_points_->points.resize(cidx);
+		params.correspondences_target_points_->points.resize(cidx);
+	}
+
+	if( sumWeight <= 1e-10 ) {
+		sumError = std::numeric_limits<double>::max();
+//			ROS_INFO("no surfel match!");
+		return false;
+	}
+	else if( numMatches < REGISTRATION_MIN_NUM_SURFELS ) {
+		sumError = std::numeric_limits<double>::max();
+		std::cout << "not enough surfels for robust matching " << numMatches << "\n";
+		return false;
+	}
+
+
+	f = sumError;
+
+//	f = sumError / sumWeight;
+
+	return true;
+
+}
+
+
+
+bool registrationErrorFunctionWithFirstAndSecondDerivativeLM( const Eigen::Matrix< double, 6, 1 >& x, const Eigen::Matrix4d& initTransform, MultiResolutionColorSurfelRegistration::RegistrationFunctionParameters& params, double& f, Eigen::Matrix< double, 6, 1 >& df, Eigen::Matrix< double, 6, 6 >& d2f, MultiResolutionColorSurfelRegistration::SurfelAssociationList& surfelAssociations ) {
+
+	double sumError = 0.0;
+	double sumWeight = 0.0;
+
+	df.setZero();
+	d2f.setZero();
+
+	const double tx = x( 0 );
+	const double ty = x( 1 );
+	const double tz = x( 2 );
+	const double qx = x( 3 );
+	const double qy = x( 4 );
+	const double qz = x( 5 );
+	if( qx*qx+qy*qy+qz*qz > 1.0 )
+		std::cout << "quaternion not stable!!\n";
+	const double qw = params.lastWSign * sqrtf(1.0-qx*qx-qy*qy-qz*qz); // retrieve sign from last qw
+
+	GradientFunctorLM gf( &surfelAssociations, tx, ty, tz, qx, qy, qz, qw, true );
+
+	if( PARALLEL )
+		tbb::parallel_for( tbb::blocked_range<size_t>(0,surfelAssociations.size()), gf );
+	else
+		std::for_each( surfelAssociations.begin(), surfelAssociations.end(), gf );
+
+	int cidx = 0;
+	if( params.correspondences_source_points_ ) {
+		params.correspondences_source_points_->points.resize(surfelAssociations.size());
+		params.correspondences_target_points_->points.resize(surfelAssociations.size());
+	}
+
+
+	double numMatches = 0;
+	for( MultiResolutionColorSurfelRegistration::SurfelAssociationList::iterator it = surfelAssociations.begin(); it != surfelAssociations.end(); ++it ) {
+
+		if( !it->match )
+			continue;
+
+
+		float nweight = it->n_src_->value_.assocWeight_ * it->n_dst_->value_.assocWeight_;
+		float weight = nweight * it->weight;
+
+		const Eigen::Matrix< double, 6, 3 > JtW = weight * it->df_dx.transpose() * it->W;
+
+		df += JtW * (it->z - it->f);
+		d2f += JtW * it->df_dx;
+
+		sumError += weight * it->error;
+		sumWeight += weight;
+		numMatches += 1.0;//nweight;
+
+
+
+		if( params.correspondences_source_points_ ) {
+
+			pcl::PointXYZ& p1 = params.correspondences_source_points_->points[cidx];
+			pcl::PointXYZ& p2 = params.correspondences_target_points_->points[cidx];
+
+			Eigen::Vector4f pos1 = it->n_dst_->getCenterPosition();
+			Eigen::Vector4f pos2 = it->n_src_->getCenterPosition();
+
+			p1.x = pos1(0);
+			p1.y = pos1(1);
+			p1.z = pos1(2);
+
+
+//			p1.x = it->dst_->mean_[0];
+//			p1.y = it->dst_->mean_[1];
+//			p1.z = it->dst_->mean_[2];
+
+			Eigen::Vector4d pos;
+			pos.block<3,1>(0,0) = pos2.block<3,1>(0,0).cast<double>();
+//			pos.block<3,1>(0,0) = it->src_->mean_.block<3,1>(0,0);
+			pos(3,0) = 1.f;
+
+			const Eigen::Vector4d pos_src = gf.currentTransform * pos;
+
+			p2.x = pos_src[0];
+			p2.y = pos_src[1];
+			p2.z = pos_src[2];
+
+			cidx++;
+		}
+
+	}
+
+
+	if( params.correspondences_source_points_ ) {
+		params.correspondences_source_points_->points.resize(cidx);
+		params.correspondences_target_points_->points.resize(cidx);
+	}
+
+	if( sumWeight <= 1e-10 ) {
+		sumError = std::numeric_limits<double>::max();
+//			ROS_INFO("no surfel match!");
+		return false;
+	}
+	else if( numMatches < REGISTRATION_MIN_NUM_SURFELS ) {
+		sumError = std::numeric_limits<double>::max();
+		std::cout << "not enough surfels for robust matching " << numMatches << "\n";
+		return false;
+	}
+
+	f = sumError;
+
+//	f = sumError / sumWeight;
+//	df = df / sumWeight;
+//	d2f = d2f / sumWeight;
+
+	return true;
+
+}
+
 
 bool MultiResolutionColorSurfelRegistration::estimateTransformationNewton( MultiResolutionColorSurfelMap& source, MultiResolutionColorSurfelMap& target, Eigen::Matrix4d& transform,
 		float startResolution, float stopResolution, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints,
@@ -1880,6 +2291,182 @@ bool MultiResolutionColorSurfelRegistration::estimateTransformationGradientDesce
 
 }
 
+bool MultiResolutionColorSurfelRegistration::estimateTransformationLevenbergMarquardt( MultiResolutionColorSurfelMap& source, MultiResolutionColorSurfelMap& target, Eigen::Matrix4d& transform, float startResolution, float stopResolution, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints, int maxIterations ) {
+
+	const double tau = 10e-10;
+//	const double min_gradient_size = 1e-4;
+	const double min_delta = 1e-4;
+	const double min_error = 1e-6;
+
+	Eigen::Matrix4d initialTransform = transform;
+
+	float minResolution = std::min( startResolution, stopResolution );
+	float maxResolution = std::max( startResolution, stopResolution );
+
+	Eigen::Matrix4d currentTransform = transform;
+
+	// set up the minimization algorithm
+	MultiResolutionColorSurfelRegistration::RegistrationFunctionParameters params;
+	params.source = &source;
+	params.target = &target;
+	params.minResolution = minResolution;
+	params.maxResolution = maxResolution;
+	params.transform = &currentTransform;
+	params.correspondences_source_points_ = correspondencesSourcePoints;
+	params.correspondences_target_points_ = correspondencesTargetPoints;
+
+	algorithm::OcTreeSamplingVectorMap<float, MultiResolutionColorSurfelMap::NodeValue> targetSamplingMap = algorithm::downsampleVectorOcTree(*target.octree_, false, target.octree_->max_depth_);
+	params.targetSamplingMap = &targetSamplingMap;
+
+
+	// initialize with current transform
+	Eigen::Matrix< double, 6, 1 > x;
+	Eigen::Quaterniond q( currentTransform.block<3,3>(0,0) );
+
+	x(0) = currentTransform( 0, 3 );
+	x(1) = currentTransform( 1, 3 );
+	x(2) = currentTransform( 2, 3 );
+	x(3) = q.x();
+	x(4) = q.y();
+	x(5) = q.z();
+	params.lastWSign = q.w() / fabsf(q.w());
+
+
+	Eigen::Matrix< double, 6, 1 > df;
+	Eigen::Matrix< double, 6, 6 > d2f;
+
+	const Eigen::Matrix< double, 6, 6 > id6 = Eigen::Matrix< double, 6, 6 >::Identity();
+	double mu = -1.0;
+	double nu = 2;
+
+	double last_error = std::numeric_limits<double>::max();
+
+	MultiResolutionColorSurfelRegistration::SurfelAssociationList surfelAssociations;
+
+	bool reassociate = true;
+
+	bool reevaluateGradient = true;
+
+	bool retVal = true;
+
+	int iter = 0;
+	while( iter < maxIterations ) {
+
+
+		if( reevaluateGradient ) {
+
+			if( reassociate ) {
+				target.clearAssociations();
+			}
+
+			float searchDistFactor = 2.f;
+			float maxSearchDist = 2.f*maxResolution;
+
+			surfelAssociations.clear();
+			associateMapsBreadthFirstParallel( surfelAssociations, source, target, targetSamplingMap, transform, 0.99f*minResolution, 1.01f*maxResolution, searchDistFactor, maxSearchDist, true );
+
+			retVal = registrationErrorFunctionWithFirstAndSecondDerivativeLM( x, initialTransform, params, last_error, df, d2f, surfelAssociations );
+		}
+
+		reevaluateGradient = false;
+
+		if( !retVal ) {
+			std::cout << "registration failed\n";
+			return false;
+		}
+
+		if( last_error < min_error ) {
+			break;
+		}
+
+
+		if( mu < 0 ) {
+			mu = tau * std::max( d2f.maxCoeff(), -d2f.minCoeff() );
+		}
+
+
+		Eigen::Matrix< double, 6, 1 > delta_x = Eigen::Matrix< double, 6, 1 >::Zero();
+		Eigen::Matrix< double, 6, 6 > d2f_inv = Eigen::Matrix< double, 6, 6 >::Zero();
+		if( fabsf( d2f.determinant() ) > std::numeric_limits<double>::epsilon() ) {
+
+			d2f_inv = (d2f + mu * id6).inverse();
+
+			delta_x = d2f_inv * df;
+
+		}
+
+		if( delta_x.norm() < min_delta ) {
+
+			if( reassociate )
+				break;
+
+			reassociate = true;
+			reevaluateGradient = true;
+
+		}
+		else
+			reassociate = false;
+
+
+
+		Eigen::Matrix< double, 6, 1 > x_new = x + delta_x;
+
+		double new_error = 0.0;
+		bool retVal2 = registrationErrorFunctionLM( x_new, initialTransform, params, new_error, surfelAssociations );
+
+		if( !retVal2 )
+			return false;
+
+		double rho = (last_error - new_error) / (delta_x.transpose() * (mu * delta_x + df));
+
+		if( rho > 0 ) {
+
+			x = x_new;
+
+			mu *= std::max( 0.333, 1.0 - pow( 2.0*rho-1.0, 3.0 ) );
+			nu = 2;
+
+			reevaluateGradient = true;
+
+		}
+		else {
+
+			mu *= nu; nu *= 2.0;
+
+		}
+
+
+		double qx = x( 3 );
+		double qy = x( 4 );
+		double qz = x( 5 );
+		double qw = params.lastWSign*sqrt(1.0-qx*qx-qy*qy-qz*qz);
+
+
+
+		if( isnan(qw) || fabsf(qx) > 1.f || fabsf(qy) > 1.f || fabsf(qz) > 1.f ) {
+			return false;
+		}
+
+
+		transform.setIdentity();
+		transform.block<3,3>(0,0) = Eigen::Matrix3d( Eigen::Quaterniond( qw, qx, qy, qz ) );
+		transform(0,3) = x( 0 );
+		transform(1,3) = x( 1 );
+		transform(2,3) = x( 2 );
+
+
+		last_error = new_error;
+
+		iter++;
+
+	}
+
+
+	return retVal;
+
+}
+
+
 bool MultiResolutionColorSurfelRegistration::estimateTransformation( MultiResolutionColorSurfelMap& source, const boost::shared_ptr< const pcl::PointCloud< pcl::PointXYZRGB > >& cloud,
 		const boost::shared_ptr< const std::vector< int > >& indices, Eigen::Matrix4d& transform, float startResolution, float stopResolution,
 		pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints, int gradientIterations, int coarseToFineIterations,
@@ -1913,18 +2500,16 @@ bool MultiResolutionColorSurfelRegistration::estimateTransformation( MultiResolu
 
 	bool retVal = true;
 	if( gradientIterations > 0 )
-		retVal = estimateTransformationGradientDescent( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, associations,
-				gradientIterations );
+		retVal = estimateTransformationLevenbergMarquardt( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, gradientIterations );
 
 	if( !retVal )
-		std::cout << "gradient descent failed\n";
+		std::cout << "levenberg marquardt failed\n";
 
 	Eigen::Matrix4d transformGradient = transform;
 
 	if( retVal ) {
 
-		bool retVal2 = estimateTransformationNewton( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, associations,
-				coarseToFineIterations, fineIterations );
+		bool retVal2 = estimateTransformationNewton( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, associations, coarseToFineIterations, fineIterations );
 		if( !retVal2 ) {
 			std::cout << "newton failed\n";
 			transform = transformGradient;
@@ -1934,6 +2519,33 @@ bool MultiResolutionColorSurfelRegistration::estimateTransformation( MultiResolu
 		}
 
 	}
+
+//	// estimate transformation from maps
+//	target.clearAssociations();
+//
+//	bool retVal = true;
+//	if( gradientIterations > 0 )
+//		retVal = estimateTransformationGradientDescent( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, associations,
+//				gradientIterations );
+//
+//	if( !retVal )
+//		std::cout << "gradient descent failed\n";
+//
+//	Eigen::Matrix4d transformGradient = transform;
+//
+//	if( retVal ) {
+//
+//		bool retVal2 = estimateTransformationNewton( source, target, transform, startResolution, stopResolution, correspondencesSourcePoints, correspondencesTargetPoints, associations,
+//				coarseToFineIterations, fineIterations );
+//		if( !retVal2 ) {
+//			std::cout << "newton failed\n";
+//			transform = transformGradient;
+//
+//			if( gradientIterations == 0 )
+//				retVal = false;
+//		}
+//
+//	}
 
 	return retVal;
 
