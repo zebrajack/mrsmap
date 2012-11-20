@@ -1853,9 +1853,32 @@ bool registrationErrorFunctionLM( const Eigen::Matrix< double, 6, 1 >& x, const 
 	}
 
 
-	f = sumError;
+	f = sumError / sumWeight;
 
-//	f = sumError / sumWeight;
+
+	if( REGULARIZE_ERROR_FUNCTION ) {
+
+		Eigen::Quaterniond q_init(initTransform.block<3,3>(0,0));
+		Eigen::Matrix< double, 6, 1 > x_init;
+		x_init.block<3,1>(0,0) = initTransform.block<3,1>(0,3);
+		x_init(3) = q_init.x();
+		x_init(4) = q_init.y();
+		x_init(5) = q_init.z();
+
+
+		Eigen::Matrix< double, 6, 6 > omega;
+		omega.setIdentity();
+		omega(0,0) = 1.0/REGULARIZER_POSE_X_VAR;
+		omega(1,1) = 1.0/REGULARIZER_POSE_Y_VAR;
+		omega(2,2) = 1.0/REGULARIZER_POSE_Z_VAR;
+		omega(3,3) = 1.0/REGULARIZER_POSE_QX_VAR;
+		omega(4,4) = 1.0/REGULARIZER_POSE_QY_VAR;
+		omega(5,5) = 1.0/REGULARIZER_POSE_QZ_VAR;
+
+
+		f += (x_init - x).transpose() * omega * (x_init - x);
+	}
+
 
 	return true;
 
@@ -1966,11 +1989,37 @@ bool registrationErrorFunctionWithFirstAndSecondDerivativeLM( const Eigen::Matri
 		return false;
 	}
 
-	f = sumError;
 
-//	f = sumError / sumWeight;
-//	df = df / sumWeight;
-//	d2f = d2f / sumWeight;
+	f = sumError / sumWeight;
+	df = df / sumWeight;
+	d2f = d2f / sumWeight;
+
+
+	if( REGULARIZE_ERROR_FUNCTION ) {
+
+		Eigen::Quaterniond q_init(initTransform.block<3,3>(0,0));
+		Eigen::Matrix< double, 6, 1 > x_init;
+		x_init.block<3,1>(0,0) = initTransform.block<3,1>(0,3);
+		x_init(3) = q_init.x();
+		x_init(4) = q_init.y();
+		x_init(5) = q_init.z();
+
+
+		Eigen::Matrix< double, 6, 6 > omega;
+		omega.setIdentity();
+		omega(0,0) = 1.0/REGULARIZER_POSE_X_VAR;
+		omega(1,1) = 1.0/REGULARIZER_POSE_Y_VAR;
+		omega(2,2) = 1.0/REGULARIZER_POSE_Z_VAR;
+		omega(3,3) = 1.0/REGULARIZER_POSE_QX_VAR;
+		omega(4,4) = 1.0/REGULARIZER_POSE_QY_VAR;
+		omega(5,5) = 1.0/REGULARIZER_POSE_QZ_VAR;
+
+
+		f += (x_init - x).transpose() * omega * (x_init - x);
+		df += omega * (x_init - x);
+		d2f += omega;
+	}
+
 
 	return true;
 
