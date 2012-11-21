@@ -468,22 +468,29 @@ void SLAM::connectClosePoses( float register_start_resolution, float register_st
 
 				// diff transform from v2 to v1
 				Eigen::Matrix4d diffTransform = ( v1->estimate().inverse() * v2->estimate() ).matrix();
-				double angle = Eigen::AngleAxisd( diffTransform.block< 3, 3 >( 0, 0 ) ).angle();
-				double dist = diffTransform.block< 3, 1 >( 0, 3 ).norm();
+
+				if( poseIsFar( diffTransform ) )
+					continue;
+
+				double angle = Eigen::AngleAxisd( diffTransform.block<3,3>(0,0) ).angle();
+				double dist = diffTransform.block<3,1>(0,3).norm();
 
 				// probability of drawing v2 to check for an edge
-				double probDist = exp( -0.5 * dist * dist / sigma2_dist );
-				double probAngle = exp( -0.5 * angle * angle / sigma2_angle );
+				double probDist = exp( -0.5 * dist*dist / sigma2_dist );
+				double probAngle = exp( -0.5 * angle*angle / sigma2_angle );
 
 				if( probDist > 0.1 && probAngle > 0.1 ) {
 
-					sumProbs += probDist * probAngle;
+					sumProbs += probDist*probAngle;
 					probs.push_back( sumProbs );
 					vertices.push_back( v2_id );
 
 				}
 
 			}
+
+			if( probs.size() == 0 )
+				continue;
 
 			// draw random number in [0,sumProbs]
 			double checkProb = (double) rand() / (double) ( RAND_MAX + 1.0 ) * sumProbs;
