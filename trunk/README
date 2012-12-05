@@ -95,9 +95,9 @@ There is a FindMRSMap.cmake script in the cmake/Modules folder to conveniently i
 You can find some applications of the lib in the src/apps folder:
 
 * evaluate_visualodometry: evaluation of successive image registration on the RGB-D benchmark dataset by Juergen Sturm et al.
-  the dataset can be found at http://vision.in.tum.de/data/datasets/rgbd-dataset/download , you have to create a file associations.txt in each dataset's folder with the associate.py dataset-tool that contains associations of depth and rgb image timestamps (associate.py depth.txt rgb.txt > associations.txt)
+  the dataset can be found at http://vision.in.tum.de/data/datasets/rgbd-dataset/download
   simply call: ./evaluate_visualodometry -i <data_folder> -s k 
-  where data_folder is the root of the RGB-D dataset and contains a file associations.txt that associates depth (first column) 
+  where data_folder is the root of the RGB-D dataset and contains a file associations.txt that associates depth (first column, e.g., associate.py depth.txt rgb.txt > associations.txt)
   and rgb images by timestamps. you should use the associate.py tool of the RGB-D benchmark dataset. evaluates for k frame skips.
   note that you can use some keys to change the visualization, for example you can switch through the resolutions using the "d" (next higher res) and "D" (next lower res) keys.
 
