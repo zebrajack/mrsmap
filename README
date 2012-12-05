@@ -69,6 +69,7 @@ MRSMap depends on the following third party libraries:
 - OctreeLib (currently from https://code.google.com/p/ais-bonn-ros-pkg/ in folder trunk/stacks/ais_bonn_pcl_addons/octreelib NO ROS REQUIRED)
 - g2o (from github: https://github.com/RainerKuemmerle/g2o)
 - Boost >= 1.40
+- ClooG
 
 
 
@@ -94,6 +95,7 @@ There is a FindMRSMap.cmake script in the cmake/Modules folder to conveniently i
 You can find some applications of the lib in the src/apps folder:
 
 * evaluate_visualodometry: evaluation of successive image registration on the RGB-D benchmark dataset by Juergen Sturm et al.
+  the dataset can be found at http://vision.in.tum.de/data/datasets/rgbd-dataset/download , you have to create a file associations.txt in each dataset's folder with the associate.py dataset-tool that contains associations of depth and rgb image timestamps (associate.py depth.txt rgb.txt > associations.txt)
   simply call: ./evaluate_visualodometry -i <data_folder> -s k 
   where data_folder is the root of the RGB-D dataset and contains a file associations.txt that associates depth (first column) 
   and rgb images by timestamps. you should use the associate.py tool of the RGB-D benchmark dataset. evaluates for k frame skips.
