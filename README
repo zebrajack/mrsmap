@@ -103,8 +103,12 @@ You can find some applications of the lib in the src/apps folder:
 
 * evaluate_slam: evaluates SLAM performance on the RGB-D benchmark dataset. simply call ./evaluate_slam <data_folder> 
   also requires a file associations.txt like the evaluage_visualodometry tool.
+  note that slowdown over time comes from the visualization, not the SLAM method itself. pcl visualizer cant handle updating the pointclouds well and needs to redraw all maps when
+  a new key frame is added. you can use keys to change the visualization as in evaluate_visualodometry.
 
 * mrsslam_app: run online SLAM with an OpenNI RGB-D camera. The image resolution can currently be changed in the code.
+  note that slowdown over time comes from the visualization, not the SLAM method itself. pcl visualizer cant handle updating the pointclouds well and needs to redraw all maps when
+  a new key frame is added. you can use keys to change the visualization as in evaluate_visualodometry.
 
 * train_map: trains an object map on RGB-D datasets. call ./train_map -h to obtain further details on its use. on startup, you will
   be able to select points in the first frame to make up a convex hull on the support plane. A suitable dataset for learning object
