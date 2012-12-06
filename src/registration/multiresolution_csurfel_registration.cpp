@@ -2342,9 +2342,9 @@ bool MultiResolutionColorSurfelRegistration::estimateTransformationGradientDesce
 
 bool MultiResolutionColorSurfelRegistration::estimateTransformationLevenbergMarquardt( MultiResolutionColorSurfelMap& source, MultiResolutionColorSurfelMap& target, Eigen::Matrix4d& transform, float startResolution, float stopResolution, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesSourcePoints, pcl::PointCloud< pcl::PointXYZ >::Ptr correspondencesTargetPoints, int maxIterations ) {
 
-	const double tau = 10e-10;
+	const double tau = 10e-5;
 //	const double min_gradient_size = 1e-4;
-	const double min_delta = 1e-4;
+	const double min_delta = 1e-3;
 	const double min_error = 1e-6;
 
 	Eigen::Matrix4d initialTransform = transform;

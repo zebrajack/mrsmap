@@ -128,7 +128,7 @@ public:
 			pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
 			pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
 			MultiResolutionColorSurfelRegistration reg;
-			reg.estimateTransformation( *lastFrameMap_, *currFrameMap, transform, 32.f * currFrameMap->min_resolution_, currFrameMap->min_resolution_, corrSrc, corrTgt, 25, 0, 5 );
+			reg.estimateTransformation( *lastFrameMap_, *currFrameMap, transform, 32.f * currFrameMap->min_resolution_, currFrameMap->min_resolution_, corrSrc, corrTgt, 100, 0, 5 );
 
 			deltat = stopwatch.getTime();
 			std::cout << "register: " << deltat << "\n";
