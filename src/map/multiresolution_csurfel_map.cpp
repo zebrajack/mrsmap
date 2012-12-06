@@ -1379,10 +1379,11 @@ inline void MultiResolutionColorSurfelMap::buildSimpleShapeTextureFeatureFunctio
 
 	for( unsigned int i = 0; i < MAX_NUM_SURFELS; i++ ) {
 
+		current->value_.surfels_[ i ].simple_shape_texture_features_.initialize();
+
 		if( current->value_.surfels_[ i ].num_points_ < MIN_SURFEL_POINTS )
 			continue;
 
-		current->value_.surfels_[ i ].simple_shape_texture_features_.initialize();
 		current->value_.surfels_[ i ].simple_shape_texture_features_.add( &current->value_.surfels_[ i ], &current->value_.surfels_[ i ], current->value_.surfels_[ i ].num_points_ );
 
 		for( unsigned int n = 0; n < 27; n++ ) {
@@ -1413,10 +1414,10 @@ inline void MultiResolutionColorSurfelMap::buildAgglomeratedShapeTextureFeatureF
 
 	for( unsigned int i = 0; i < MAX_NUM_SURFELS; i++ ) {
 
+		current->value_.surfels_[ i ].agglomerated_shape_texture_features_ = current->value_.surfels_[ i ].simple_shape_texture_features_;
+
 		if( current->value_.surfels_[ i ].num_points_ < MIN_SURFEL_POINTS )
 			continue;
-
-		current->value_.surfels_[ i ].agglomerated_shape_texture_features_ = current->value_.surfels_[ i ].simple_shape_texture_features_;
 
 		for( unsigned int n = 0; n < 27; n++ ) {
 
