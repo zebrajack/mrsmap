@@ -170,7 +170,7 @@ public:
 					exit( -1 );
 
 				if( graphChanged_ || viewer_.forceRedraw ) {
-//					viewer_.visualizeSLAMGraph();
+					viewer_.visualizeSLAMGraph();
 					viewer_.forceRedraw = false;
 				}
 

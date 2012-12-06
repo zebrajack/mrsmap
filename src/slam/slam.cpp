@@ -48,13 +48,13 @@
 
 using namespace mrsmap;
 
-#define GRADIENT_ITS 25
-#define NEWTON_FEAT_ITS 5
+#define GRADIENT_ITS 100
+#define NEWTON_FEAT_ITS 0
 #define NEWTON_ITS 5
 
 #define LOG_LIKELIHOOD_ADD_THRESHOLD -150000
 
-#define REGISTER_TWICE 1
+#define REGISTER_TWICE 0
 
 SLAM::SLAM() {
 
