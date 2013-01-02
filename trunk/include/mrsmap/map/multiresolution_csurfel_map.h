@@ -137,6 +137,7 @@ public:
 
 			up_to_date_ = false;
 			applyUpdate_ = true;
+			unevaluated_ = false;
 
 			eff_view_dist_ = std::numeric_limits< float >::max();
 
@@ -149,10 +150,19 @@ public:
 		inline Surfel& operator+=( const Surfel& rhs ) {
 
 			if( rhs.num_points_ > 0 && num_points_ < MAX_SURFEL_POINTS ) {
-				mean_ += rhs.mean_;
-				cov_ += rhs.cov_;
 
-				num_points_ += rhs.num_points_;
+				// numerically stable one-pass update scheme
+				if( num_points_ == 0 ) {
+					cov_ = rhs.cov_;
+					mean_ = rhs.mean_;
+					num_points_ = rhs.num_points_;
+				}
+				else {
+					const Eigen::Matrix< double, 6, 1 > deltaS = rhs.num_points_ * mean_ - num_points_ * rhs.mean_;
+					cov_ += rhs.cov_ + 1.0 / (num_points_ * rhs.num_points_ * (rhs.num_points_ + num_points_)) * deltaS * deltaS.transpose();
+					mean_ += rhs.mean_;
+					num_points_ += rhs.num_points_;
+				}
 
 				first_view_dir_ = rhs.first_view_dir_;
 				first_view_inv_dist_ = rhs.first_view_inv_dist_;
@@ -162,11 +172,18 @@ public:
 			return *this;
 		}
 
-		inline void add( const Eigen::Matrix< double, 6, 1 >& sum, const Eigen::Matrix< double, 6, 6 >& sum_squares, double num_points ) {
-			if( num_points > 0 && num_points_ < MAX_SURFEL_POINTS ) {
-				mean_ += sum;
-				cov_ += sum_squares;
-				num_points_ += num_points;
+		inline void add( const Eigen::Matrix< double, 6, 1 >& point ) {
+			// numerically stable one-pass update scheme
+			if( num_points_ < std::numeric_limits<double>::epsilon() ) {
+				mean_ += point;
+				num_points_ += 1.0;
+				up_to_date_ = false;
+			}
+			else if( num_points_ < MAX_SURFEL_POINTS ) {
+				const Eigen::Matrix< double, 6, 1 > deltaS = (mean_ - num_points_ * point);
+				cov_ += 1.0 / (num_points_ * (num_points_ + 1.0)) * deltaS * deltaS.transpose();
+				mean_ += point;
+				num_points_ += 1.0;
 				up_to_date_ = false;
 			}
 		}
@@ -178,9 +195,8 @@ public:
 
 			if( num_points_ >= MIN_SURFEL_POINTS ) {
 
-				const double inv_num = 1.0 / num_points_;
-				mean_ *= inv_num;
-				cov_ = ( inv_num * cov_ - mean_ * mean_.transpose() ).eval();
+				mean_ /= num_points_;
+				cov_ /= (num_points_-1.0);
 
 				// enforce symmetry..
 				cov_( 1, 0 ) = cov_( 0, 1 );
@@ -200,10 +216,10 @@ public:
 
 				double det = cov_.block< 3, 3 >( 0, 0 ).determinant();
 
-				if( det >= -std::numeric_limits< double >::epsilon() && det <= std::numeric_limits< double >::epsilon() ) {
-					cov_( 0, 0 ) += 0.00001;
-					cov_( 1, 1 ) += 0.00001;
-					cov_( 2, 2 ) += 0.00001;
+				if( det <= std::numeric_limits<double>::epsilon() ) {
+					mean_.setZero();
+					cov_.setZero();
+					num_points_ = 0;
 				}
 				else {
 
@@ -217,26 +233,29 @@ public:
 					if( normal_.dot( first_view_dir_ ) > 0.0 )
 						normal_ *= -1.0;
 
-					double sumEigVals = eigen_values_.sum();
-
-					if( sumEigVals > 1e-10 )
-						surface_curvature_ = eigen_values_( 0 ) / sumEigVals;
-					else
-						surface_curvature_ = 0.0;
-
-					color_curvature_ = cov_( 3, 3 ) + cov_( 4, 4 ) + cov_( 5, 5 );
-
-					curvature_ = std::min( 1.0, std::max( 0.0, ( 10.0 * surface_curvature_ + 9.0 * color_curvature_ ) ) );
-
-					cov_add_.setZero();
-
 				}
 
 			}
 
 			up_to_date_ = true;
+			unevaluated_ = false;
 
 		}
+
+
+		inline void unevaluate() {
+
+			if( num_points_ > 0.0 ) {
+
+				mean_ *= num_points_;
+				cov_ *= (num_points_-1.0);
+
+				unevaluated_ = true;
+
+			}
+
+		}
+
 
 		Eigen::Matrix< double, 3, 1 > initial_view_dir_, first_view_dir_;
 
@@ -246,12 +265,8 @@ public:
 
 		Eigen::Matrix< double, 6, 1 > mean_;
 		Eigen::Matrix< double, 3, 1 > normal_;
-		double surface_curvature_;
-		double color_curvature_;
-		double curvature_;
 		Eigen::Matrix< double, 6, 6 > cov_;
-		Eigen::Matrix< double, 3, 3 > cov_add_;
-		bool up_to_date_, applyUpdate_;
+		bool up_to_date_, applyUpdate_, unevaluated_;
 
 		int idx_;
 
@@ -284,6 +299,7 @@ public:
 			idx_ = -1;
 			associated_ = 0;
 			assocWeight_ = 1.f;
+			border_ = false;
 
 			surfels_[ 0 ].initial_view_dir_ = Eigen::Vector3d( 1., 0., 0. );
 			surfels_[ 1 ].initial_view_dir_ = Eigen::Vector3d( -1., 0., 0. );
@@ -344,15 +360,22 @@ public:
 		}
 
 		inline void evaluateSurfels() {
-			max_curvature_ = 0.0;
 			for( unsigned int i = 0; i < 6; i++ ) {
-				if( !surfels_[ i ].up_to_date_ ) {
+				if( !surfels_[i].up_to_date_ || surfels_[i].unevaluated_ ) {
 					surfels_[ i ].evaluate();
-					if( surfels_[ i ].num_points_ > MIN_SURFEL_POINTS )
-						max_curvature_ = std::max( max_curvature_, surfels_[ i ].curvature_ );
 				}
 			}
 		}
+
+
+		inline void unevaluateSurfels() {
+			for( unsigned int i = 0; i < 6; i++ ) {
+				if( surfels_[i].up_to_date_ ) {
+					surfels_[i].unevaluate();
+				}
+			}
+		}
+
 
 		Surfel surfels_[ 6 ];
 		char associated_; // -1: disabled, 0: not associated, 1: associated, 2: not associated but neighbor of associated node
@@ -360,9 +383,9 @@ public:
 		char assocSurfelIdx_, assocSurfelDstIdx_;
 		float assocWeight_;
 
-		int idx_;
+		bool border_;
 
-		double max_curvature_;
+		int idx_;
 
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -427,11 +450,18 @@ public:
 
 	void findVirtualBorderPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, std::vector< int >& indices );
 
+	void findForegroundBorderPoints( const pcl::PointCloud<pcl::PointXYZRGB>& cloud, std::vector< int >& indices );
+
 	void clearAtPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, const std::vector< int >& indices );
 
 	void markNoUpdateAtPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, const std::vector< int >& indices );
 
 	void clearUpdateSurfelsAtPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, const std::vector< int >& indices );
+
+	void markBorderAtPoints( const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const std::vector< int >& indices );
+
+	static inline void clearBorderFlagFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
+	void clearBorderFlag();
 
 	void markUpdateAllSurfels();
 	static inline void markUpdateAllSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
@@ -440,6 +470,7 @@ public:
 	static inline void markUpdateImprovedEffViewDistSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
 
 	void evaluateSurfels();
+	void unevaluateSurfels();
 
 	bool pointInForeground( const Eigen::Vector3f& position, const cv::Mat& image_depth, const cv::Point2f imagePoint, float scale, float jumpThreshold );
 
@@ -465,9 +496,10 @@ public:
 
 	void visualizePrincipalSurface( pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloudPtr, int depth, int viewDir );
 	bool projectOnPrincipalSurface( Eigen::Vector3d& sample, const std::vector< Surfel* >& neighbors,
-			const std::vector< Eigen::Vector3d, Eigen::aligned_allocator< Eigen::Vector3d > >& centerPositions, double resolution );
+				const std::vector< Eigen::Vector3d, Eigen::aligned_allocator< Eigen::Vector3d > >& centerPositions, double resolution );
 
 	static inline void evaluateSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
+	static inline void unevaluateSurfelsFunction(spatialaggregate::OcTreeNode<float, NodeValue>* current, spatialaggregate::OcTreeNode<float, NodeValue>* next, void* data);
 	static inline void clearUnstableSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
 	static inline void setApplyUpdateFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );
 	static inline void setUpToDateFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data );

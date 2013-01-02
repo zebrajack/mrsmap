@@ -52,6 +52,9 @@
 #include <mrsmap/visualization/visualization_slam.h>
 #include <mrsmap/utilities/utilities.h>
 
+#include <boost/program_options.hpp>
+namespace po = boost::program_options;
+
 using namespace mrsmap;
 
 //typedef MultiResolutionColorSurfelMap MultiResolutionSurfelMap;
@@ -62,12 +65,27 @@ using namespace mrsmap;
 class EvaluateSLAM {
 public:
 
-	EvaluateSLAM( const std::string& path )
+	EvaluateSLAM(  int argc, char** argv  )
 			: viewer_( &slam_ ) {
 
-		path_ = path;
 
-		min_resolution_ = 0.0125f;
+		po::options_description desc("Allowed options");
+		desc.add_options()
+		    ("help,h", "help")
+		    ("inputpath,i", po::value<std::string>(&path_)->default_value("."), "path to input data")
+		    ("maxresolution,r", po::value<double>(&min_resolution_)->default_value(0.0125f), "maximum resolution")
+		    ("skippastframes,k", po::value<bool>(&skip_past_frames_)->default_value(false), "skip past frames for real-time evaluation")
+		;
+
+    	po::variables_map vm;
+    	po::store(po::parse_command_line(argc, argv, desc), vm);
+    	po::notify(vm);
+
+    	if( vm.count("help") || vm.count("h") ) {
+    		std::cout << desc << "\n";
+    		exit(0);
+    	}
+
 		max_radius_ = 30.f;
 
 		imageAllocator_ = boost::shared_ptr< MultiResolutionSurfelMap::ImagePreAllocator >( new MultiResolutionSurfelMap::ImagePreAllocator() );
@@ -115,6 +133,8 @@ public:
 
 		std::vector< PoseInfo, Eigen::aligned_allocator< PoseInfo > > trajectoryEstimate;
 
+		double nextTime = 0;
+
 		while( assocFile.good() ) {
 
 			// read in line
@@ -136,6 +156,18 @@ public:
 					usleep( 10 );
 				}
 
+
+				double stamp = 0.0;
+				std::stringstream sstr;
+				sstr << entryStrs[0];
+				sstr >> stamp;
+
+				if( skip_past_frames_ && nextTime > stamp ) {
+					std::cout << "================= SKIP =================\n";
+					continue;
+				}
+
+
 				// load images
 				cv::Mat depthImg = cv::imread( path_ + "/" + entryStrs[ 1 ], CV_LOAD_IMAGE_ANYDEPTH );
 				cv::Mat rgbImg = cv::imread( path_ + "/" + entryStrs[ 3 ], CV_LOAD_IMAGE_ANYCOLOR );
@@ -144,11 +176,20 @@ public:
 				pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud( new pcl::PointCloud< pcl::PointXYZRGB >() );
 				imagesToPointCloud( depthImg, rgbImg, entryStrs[ 0 ], cloud );
 
-				unsigned int numEdges = slam_.optimizer_->edges().size();
+	    		// measure time to skip frames
+	    		pcl::StopWatch stopwatch;
+	    		stopwatch.reset();
+
+	    		unsigned int numEdges = slam_.optimizer_->edges().size();
 				unsigned int numVertices = slam_.optimizer_->vertices().size();
 				unsigned int referenceID = slam_.referenceKeyFrameId_;
 
 				bool retVal = slam_.addImage( rgbImg, cloud, register_start_resolution, register_stop_resolution, min_resolution_, false );
+
+				double deltat = stopwatch.getTimeSeconds() * 1000.0;
+				std::cout << "slam iteration took: " << deltat << "\n";
+
+				nextTime = stamp + 0.001 * deltat;
 
 				if( retVal ) {
 					// store relative translation to reference keyframe
@@ -220,7 +261,9 @@ public:
 
 	Eigen::Matrix4d lastTransform_;
 
-	float min_resolution_, max_radius_;
+	double min_resolution_, max_radius_;
+
+	bool skip_past_frames_;
 
 	boost::shared_ptr< MultiResolutionSurfelMap::ImagePreAllocator > imageAllocator_;
 	boost::shared_ptr< spatialaggregate::OcTreeNodeDynamicAllocator< float, MultiResolutionSurfelMap::NodeValue > > treeNodeAllocator_[ 2 ];
@@ -233,7 +276,7 @@ public:
 
 int main( int argc, char** argv ) {
 
-	EvaluateSLAM ev( argv[ 1 ] );
+	EvaluateSLAM ev( argc, argv );
 	ev.evaluate();
 
 	while( ev.viewer_.is_running ) {

@@ -101,6 +101,7 @@ public:
 		    ("inputpath,i", po::value<std::string>(&input_path_)->default_value("."), "path to input data")
 		    ("startframe,s", po::value<int>(&start_frame_)->default_value(0), "start frame")
 		    ("endframe,e", po::value<int>(&end_frame_)->default_value(1000), "end frame")
+		    ("skippastframes,k", po::value<bool>(&skip_past_frames_)->default_value(false), "skip past frames for real-time evaluation")
 		;
 
     	po::variables_map vm;
@@ -206,6 +207,8 @@ public:
 
     	unsigned int frameIdx = 0;
 
+    	double nextTime = 0;
+
     	while( assocFile.good() ) {
 
     		count++;
@@ -235,13 +238,13 @@ public:
 
 					std::cout << "processing frame " << frameIdx << "\n";
 
+					double stamp = 0.0;
+					std::stringstream sstr;
+					sstr << entryStrs[0];
+					sstr >> stamp;
+
 					if( frameIdx == start_frame_ ) {
 						referenceTransform_.setIdentity();
-
-						double stamp = 0.0;
-						std::stringstream sstr;
-						sstr << entryStrs[0];
-						sstr >> stamp;
 
 						GTMap::iterator it = groundTruth_.upper_bound( stamp );
 						if( it != groundTruth_.end() ) {
@@ -251,11 +254,20 @@ public:
 						}
 					}
 
+					if( skip_past_frames_ && nextTime > stamp ) {
+						std::cout << "================= SKIP =================\n";
+						frameIdx++;
+						continue;
+					}
+
 					// extract point cloud from image pair
 					pcl::PointCloud< pcl::PointXYZRGB >::Ptr cloud( new pcl::PointCloud< pcl::PointXYZRGB >() );
 					imagesToPointCloud( depthImg, rgbImg, entryStrs[0], cloud );
 
 					double deltat = processFrame( cloud );
+
+					nextTime = stamp + 0.001 * deltat;
+
 
 					Eigen::Vector3d t_est( referenceTransform_(0,3), referenceTransform_(1,3), referenceTransform_(2,3) );
 					double dist_est = (t_est - map_mean_).norm();
@@ -339,10 +351,10 @@ public:
 
 
 		Eigen::Matrix4d incTransform = Eigen::Matrix4d::Identity();
-		pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-		pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+		pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+		pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 		MultiResolutionColorSurfelRegistration reg;
-		reg.estimateTransformation( *map_, target, incTransform, 16.f * map_->min_resolution_, map_->min_resolution_, corrSrc, corrTgt, 25, 0, 5 );
+		reg.estimateTransformation( *map_, target, incTransform, 16.f * map_->min_resolution_, map_->min_resolution_, corrSrc, corrTgt, 20, 0, 5 );
 
 		double deltat = stopwatch.getTimeSeconds() * 1000.0;
 		std::cout << "registration took: " << deltat << "\n";
@@ -379,6 +391,8 @@ public:
 
     double min_resolution_, max_range_;
     int start_frame_, end_frame_;
+
+    bool skip_past_frames_;
 
     Eigen::Matrix4d initialTransform_, referenceTransform_;
 

@@ -117,6 +117,9 @@ public:
 		deltat = stopwatch.getTimeSeconds() * 1000.0;
 		std::cout << "feature: " << deltat << "\n";
 
+		currFrameMap->findForegroundBorderPoints( *cloud, imageBorderIndices );
+		currFrameMap->markBorderAtPoints( *cloud, imageBorderIndices );
+
 		// register frames
 		Eigen::Matrix4d transform;
 		transform.setIdentity();
@@ -125,8 +128,8 @@ public:
 		if( lastFrameMap_ ) {
 
 			stopwatch.reset();
-			pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-			pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+			pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+			pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 			MultiResolutionColorSurfelRegistration reg;
 			reg.estimateTransformation( *lastFrameMap_, *currFrameMap, transform, 32.f * currFrameMap->min_resolution_, currFrameMap->min_resolution_, corrSrc, corrTgt, 100, 0, 5 );
 

@@ -176,8 +176,8 @@ bool SLAM::addEdge( unsigned int v1_id, unsigned int v2_id, const Eigen::Matrix4
 	// register maps with pose guess from graph
 	Eigen::Matrix< double, 6, 6 > poseCov;
 
-	pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-	pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+	pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+	pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 	MultiResolutionColorSurfelRegistration reg;
 	bool retVal = reg.estimateTransformation( *( keyFrameNodeMap_[ v1_id ]->map_ ), *( keyFrameNodeMap_[ v2_id ]->map_ ), transform, register_start_resolution, register_stop_resolution, corrSrc,
 			corrTgt, GRADIENT_ITS, NEWTON_FEAT_ITS, NEWTON_ITS );
@@ -296,8 +296,8 @@ bool SLAM::addImage( const cv::Mat& img_rgb, const pcl::PointCloud< pcl::PointXY
 	}
 	else {
 
-		pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-		pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+		pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+		pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 		MultiResolutionColorSurfelRegistration reg;
 		bool retVal = reg.estimateTransformation( *( keyFrames_[ referenceKeyFrameId_ ]->map_ ), *target, incTransform, register_start_resolution, register_stop_resolution, corrSrc, corrTgt,
 				GRADIENT_ITS, NEWTON_FEAT_ITS, NEWTON_ITS );
@@ -338,8 +338,8 @@ bool SLAM::addImage( const cv::Mat& img_rgb, const pcl::PointCloud< pcl::PointXY
 
 		if( !keyFrames_.empty() ) {
 
-			pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-			pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+			pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+			pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 			MultiResolutionColorSurfelRegistration reg;
 			reg.estimatePoseCovariance( poseCov, *( keyFrames_[ referenceKeyFrameId_ ]->map_ ), *( keyFrame->map_ ), lastTransform_, register_start_resolution, register_stop_resolution );
 
@@ -563,8 +563,8 @@ bool SLAM::refineEdge( g2o::EdgeSE3* edge, float register_start_resolution, floa
 	if( keyFrameNodeMap_.find( v1_id ) == keyFrameNodeMap_.end() || keyFrameNodeMap_.find( v2_id ) == keyFrameNodeMap_.end() )
 		return true; // dont delete this edge!
 
-	pcl::PointCloud< pcl::PointXYZ >::Ptr corrSrc;
-	pcl::PointCloud< pcl::PointXYZ >::Ptr corrTgt;
+	pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrSrc;
+	pcl::PointCloud< pcl::PointXYZRGB >::Ptr corrTgt;
 	MultiResolutionColorSurfelRegistration reg;
 	bool retVal = reg.estimateTransformation( *( keyFrameNodeMap_[ v1_id ]->map_ ), *( keyFrameNodeMap_[ v2_id ]->map_ ), diffTransform, register_start_resolution, register_stop_resolution, corrSrc,
 			corrTgt, GRADIENT_ITS, NEWTON_FEAT_ITS, NEWTON_ITS );
@@ -798,6 +798,7 @@ boost::shared_ptr< MultiResolutionSurfelMap > SLAM::getMap( const Eigen::Matrix4
 		std::vector< int > imageBorderIndices;
 		graphmap->findVirtualBorderPoints( *( keyFrameNodeMap_[ v_id ]->cloud_ ), imageBorderIndices );
 		graphmap->markNoUpdateAtPoints( transformedCloud, imageBorderIndices );
+		graphmap->unevaluateSurfels();
 		graphmap->addImage( transformedCloud );
 		graphmap->clearUpdateSurfelsAtPoints( transformedCloud, imageBorderIndices ); // only new surfels at these points have up_to_date == false !
 		graphmap->octree_->root_->establishNeighbors();
@@ -875,6 +876,7 @@ boost::shared_ptr< MultiResolutionSurfelMap > SLAM::getMapInConvexHull( const Ei
 		std::vector< int > imageBorderIndices;
 		graphmap->findVirtualBorderPoints( *( keyFrameNodeMap_[ v_id ]->cloud_ ), imageBorderIndices );
 		graphmap->markNoUpdateAtPoints( *transformedCloud, imageBorderIndices );
+		graphmap->unevaluateSurfels();
 		graphmap->addPoints( *transformedCloud, object_indices->indices );
 		graphmap->clearUpdateSurfelsAtPoints( *transformedCloud, imageBorderIndices ); // only new surfels at these points have up_to_date == false !
 		graphmap->octree_->root_->establishNeighbors();
