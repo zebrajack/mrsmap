@@ -39,6 +39,23 @@
 
 using namespace mrsmap;
 
+bool mrsmap::pointInImage( const Eigen::Vector4f& p ) {
+
+	if( isnan( p(0) ) )
+		return false;
+
+	double px = 525.0 * p(0) / p(2);
+	double py = 525.0 * p(1) / p(2);
+
+
+	if( px < -320.0 || px > 320.0 || py < -240.0 || py > 240.0 ) {
+		return false;
+	}
+
+	return true;
+
+}
+
 void mrsmap::imagesToPointCloud( const cv::Mat& depthImg, const cv::Mat& colorImg, const std::string& timeStamp, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling ) {
 
 	cloud->header.frame_id = "openni_rgb_optical_frame";

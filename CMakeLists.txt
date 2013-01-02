@@ -103,7 +103,7 @@ target_link_libraries( evaluate_visual_odometry mrsmap ${Boost_PROGRAM_OPTIONS_L
 # -- evaluate_slam for evaluation of SLAM performance on RGBD dataset
 add_executable( evaluate_slam src/apps/evaluate_slam.cpp )
 add_definitions( ${SSE_FLAGS} )
-target_link_libraries( evaluate_slam mrsslam )
+target_link_libraries( evaluate_slam mrsslam ${Boost_PROGRAM_OPTIONS_LIBRARY} )
 
 
 # -- train_objectmap for mapping a multi-view mrs model of an object from RGBD dataset

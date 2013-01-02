@@ -45,6 +45,8 @@
 
 namespace mrsmap {
 
+bool pointInImage( const Eigen::Vector4f& p );
+
 void imagesToPointCloud( const cv::Mat& depthImg, const cv::Mat& colorImg, const std::string& timeStamp, pcl::PointCloud< pcl::PointXYZRGB >::Ptr& cloud, unsigned int downsampling = 1 );
 
 void pointCloudToImage( const pcl::PointCloud< pcl::PointXYZRGB >::ConstPtr& cloud, cv::Mat& img );

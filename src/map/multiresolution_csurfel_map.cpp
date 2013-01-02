@@ -485,10 +485,8 @@ void MultiResolutionColorSurfelMap::addPoints( const pcl::PointCloud< pcl::Point
 		double viewDistanceInv = 1.0 / viewDistance;
 		viewDirection *= viewDistanceInv;
 
-		double distanceWeight = 1.0;
-
 		MultiResolutionColorSurfelMap::Surfel surfel;
-		surfel.add( distanceWeight * pos, ( distanceWeight * pos ) * pos.transpose(), distanceWeight );
+		surfel.add( pos );
 		surfel.first_view_dir_ = viewDirection;
 		surfel.first_view_inv_dist_ = viewDistanceInv;
 
@@ -691,18 +689,17 @@ void MultiResolutionColorSurfelMap::addImage( const pcl::PointCloud< pcl::PointX
 			pos( 4 ) = posT( 4 ) = alpha;
 			pos( 5 ) = posT( 5 ) = beta;
 
-			const Eigen::Matrix< double, 6, 6 > ppT = pos * posT;
 
 			if( !smoothViewDir ) {
 				MultiResolutionColorSurfelMap::Surfel* surfel = ( *mapPtr )->getSurfel( viewDirection );
-				surfel->add( pos, ppT, 1.0 );
+				surfel->add( pos );
 			}
 			else {
 				// add surfel to view directions within an angular interval
 				for( unsigned int k = 0; k < MAX_NUM_SURFELS; k++ ) {
 					const double dist = viewDirection.dot( ( *mapPtr )->surfels_[ k ].initial_view_dir_ );
 					if( dist > max_dist ) {
-						( *mapPtr )->surfels_[ k ].add( pos, ppT, 1.0 );
+						( *mapPtr )->surfels_[ k ].add( pos );
 					}
 				}
 			}
@@ -1026,6 +1023,101 @@ void MultiResolutionColorSurfelMap::findVirtualBorderPoints( const pcl::PointClo
 
 }
 
+
+void MultiResolutionColorSurfelMap::findForegroundBorderPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, std::vector< int >& indices ) {
+
+	// detect foreground points at depth jumps
+	// determine first image points from the borders that are not nan => use 0 depth beyond borders
+
+	const float depthJumpRatio = 0.95f*0.95f;
+	const float invDepthJumpRatio = 1.f/depthJumpRatio;
+
+	indices.clear();
+	indices.reserve( cloud.points.size() );
+
+	// horizontally
+	int idx = -1;
+	for ( unsigned int y = 0; y < cloud.height; y++ ) {
+
+		float lastDepth2 = 0.0;
+		int lastIdx = -1;
+
+		for ( unsigned int x = 0; x < cloud.width; x++ ) {
+
+			idx++;
+
+			// if not nan, push back and break
+			const pcl::PointXYZRGB& p = cloud.points[idx];
+			const float px = p.x;
+			const float py = p.y;
+			const float pz = p.z;
+
+			if( isnan( px ) ) {
+				continue;
+			}
+
+			// check for depth jumps
+			float depth2 = px*px+py*py+pz*pz;
+			float ratio = lastDepth2 / depth2;
+			if( ratio < depthJumpRatio ) {
+				if( lastIdx != -1 )
+					indices.push_back( lastIdx );
+			}
+			if( ratio > invDepthJumpRatio ) {
+				indices.push_back( idx );
+			}
+
+			lastIdx = idx;
+
+			lastDepth2 = depth2;
+
+		}
+
+	}
+
+
+	// vertically
+	for ( unsigned int x = 0; x < cloud.width; x++ ) {
+
+		float lastDepth2 = 0.0;
+		int lastIdx = -1;
+
+		for ( unsigned int y = 0; y < cloud.height; y++ ) {
+
+			int idx = y * cloud.width + x;
+
+			// if not nan, push back and break
+			const pcl::PointXYZRGB& p = cloud.points[idx];
+			const float px = p.x;
+			const float py = p.y;
+			const float pz = p.z;
+
+			if( isnan( px ) )
+				continue;
+
+			// check for depth jumps
+			float depth2 = px*px+py*py+pz*pz;
+			float ratio = lastDepth2 / depth2;
+			if( ratio < depthJumpRatio ) {
+				if( lastIdx != -1 )
+					indices.push_back( lastIdx );
+			}
+			if( ratio > invDepthJumpRatio ) {
+				indices.push_back( idx );
+			}
+
+			lastIdx = idx;
+
+			lastDepth2 = depth2;
+
+		}
+
+	}
+
+}
+
+
+
 void MultiResolutionColorSurfelMap::clearAtPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, const std::vector< int >& indices ) {
 
 	Eigen::Vector3d sensorOrigin;
@@ -1209,6 +1301,70 @@ inline void MultiResolutionColorSurfelMap::markUpdateAllSurfelsFunction( spatial
 
 }
 
+void MultiResolutionColorSurfelMap::markBorderAtPoints( const pcl::PointCloud< pcl::PointXYZRGB >& cloud, const std::vector< int >& indices ) {
+
+	Eigen::Vector3d sensorOrigin;
+	for ( int i = 0; i < 3; i++ )
+		sensorOrigin( i ) = cloud.sensor_origin_( i );
+
+	const double max_dist = MAX_VIEWDIR_DIST;
+
+	for ( unsigned int i = 0; i < indices.size(); i++ ) {
+
+		const pcl::PointXYZRGB& p = cloud.points[indices[i]];
+		const float x = p.x;
+		const float y = p.y;
+		const float z = p.z;
+
+		if ( isnan( x ) || isinf( x ) )
+			continue;
+
+		if ( isnan( y ) || isinf( y ) )
+			continue;
+
+		if ( isnan( z ) || isinf( z ) )
+			continue;
+
+		Eigen::Matrix< double, 3, 1 > pos;
+		pos( 0 ) = p.x;
+		pos( 1 ) = p.y;
+		pos( 2 ) = p.z;
+
+		Eigen::Vector3d viewDirection = pos - sensorOrigin;
+		const double viewDistance = viewDirection.norm();
+
+		if ( viewDistance < 1e-10 )
+			continue;
+
+		viewDirection = viewDirection / viewDistance;
+
+		spatialaggregate::OcTreeKey< float, NodeValue > position = octree_->getKey( p.getVector4fMap() );
+		spatialaggregate::OcTreeNode< float, NodeValue >* n = octree_->root_;
+		while ( n ) {
+
+			n->value_.border_ = true;
+
+			n = n->children_[n->getOctant( position )];
+
+		}
+
+	}
+
+}
+
+
+inline void MultiResolutionColorSurfelMap::clearBorderFlagFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data ) {
+
+	current->value_.border_ = false;
+
+}
+
+void MultiResolutionColorSurfelMap::clearBorderFlag() {
+
+	octree_->root_->sweepDown( NULL, &clearBorderFlagFunction );
+
+}
+
 void MultiResolutionColorSurfelMap::markUpdateImprovedEffViewDistSurfels( const Eigen::Vector3f& viewPosition ) {
 
 	Eigen::Vector3d viewPos = viewPosition.cast< double >();
@@ -1242,6 +1398,12 @@ inline void MultiResolutionColorSurfelMap::markUpdateImprovedEffViewDistSurfelsF
 void MultiResolutionColorSurfelMap::evaluateSurfels() {
 
 	octree_->root_->sweepDown( NULL, &evaluateSurfelsFunction );
+
+}
+
+void MultiResolutionColorSurfelMap::unevaluateSurfels() {
+
+	octree_->root_->sweepDown( NULL, &unevaluateSurfelsFunction );
 
 }
 
@@ -1492,6 +1654,10 @@ inline void MultiResolutionColorSurfelMap::clearUnstableSurfelsFunction( spatial
 
 inline void MultiResolutionColorSurfelMap::evaluateSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data ) {
 	current->value_.evaluateSurfels();
+}
+
+inline void MultiResolutionColorSurfelMap::unevaluateSurfelsFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next, void* data ) {
+	current->value_.unevaluateSurfels();
 }
 
 inline void MultiResolutionColorSurfelMap::clearAssociatedFlagFunction( spatialaggregate::OcTreeNode< float, NodeValue >* current, spatialaggregate::OcTreeNode< float, NodeValue >* next,
@@ -2126,9 +2292,6 @@ std::ostream& operator<<( std::ostream& os, MultiResolutionColorSurfelMap::NodeV
 		os.write( (char*) &v.surfels_[ i ].num_points_, sizeof(double) );
 		os << v.surfels_[ i ].mean_;
 		os << v.surfels_[ i ].normal_;
-		os.write( (char*) &v.surfels_[ i ].surface_curvature_, sizeof(double) );
-		os.write( (char*) &v.surfels_[ i ].color_curvature_, sizeof(double) );
-		os.write( (char*) &v.surfels_[ i ].curvature_, sizeof(double) );
 		os << v.surfels_[ i ].cov_;
 		os.write( (char*) &v.surfels_[ i ].up_to_date_, sizeof(bool) );
 		os.write( (char*) &v.surfels_[ i ].applyUpdate_, sizeof(bool) );
@@ -2148,9 +2311,6 @@ std::istream& operator>>( std::istream& os, MultiResolutionColorSurfelMap::NodeV
 		os.read( (char*) &v.surfels_[ i ].num_points_, sizeof(double) );
 		os >> v.surfels_[ i ].mean_;
 		os >> v.surfels_[ i ].normal_;
-		os.read( (char*) &v.surfels_[ i ].surface_curvature_, sizeof(double) );
-		os.read( (char*) &v.surfels_[ i ].color_curvature_, sizeof(double) );
-		os.read( (char*) &v.surfels_[ i ].curvature_, sizeof(double) );
 		os >> v.surfels_[ i ].cov_;
 		os.read( (char*) &v.surfels_[ i ].up_to_date_, sizeof(bool) );
 		os.read( (char*) &v.surfels_[ i ].applyUpdate_, sizeof(bool) );
