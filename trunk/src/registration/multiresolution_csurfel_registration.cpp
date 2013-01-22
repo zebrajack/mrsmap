@@ -273,7 +273,7 @@ spatialaggregate::OcTreeNode< float, MultiResolutionColorSurfelMap::NodeValue >*
 		// has only marginal (positive!) effect on visual odometry result
 		// makes tracking more robust (when only few surfels available)
 		cov1_ss *= INTERPOLATION_COV_FACTOR;
-		const Eigen::Matrix< double, 6, 6 > cov2_ss = INTERPOLATION_COV_FACTOR * matchedSurfel->cov_;
+		const Eigen::Matrix< double, 6, 6 > cov2_ss = INTERPOLATION_COV_FACTOR * srcSurfel->cov_;
 
 		Eigen::Matrix< double, 6, 1 > diff_s;
 		diff_s.block<3,1>(0,0) = dstMean.block<3,1>(0,0) - pos_match_src.block<3,1>(0,0);
@@ -385,7 +385,7 @@ spatialaggregate::OcTreeNode< float, MultiResolutionColorSurfelMap::NodeValue >*
 		// has only marginal (positive!) effect on visual odometry result
 		// makes tracking more robust (when only few surfels available)
 		cov1_ss *= INTERPOLATION_COV_FACTOR;
-		const Eigen::Matrix3d cov2_ss = INTERPOLATION_COV_FACTOR * matchedSurfel->cov_.block<3,3>(0,0);
+		const Eigen::Matrix3d cov2_ss = INTERPOLATION_COV_FACTOR * srcSurfel->cov_.block<3,3>(0,0);
 
 		const Eigen::Vector3d diff_s = dstMean - pos_match_src.block<3,1>(0,0);
 
@@ -2942,7 +2942,7 @@ bool MultiResolutionColorSurfelRegistration::estimateTransformationLevenbergMarq
 		transform(2,3) = x( 2 );
 
 
-		last_error = new_error;
+//		last_error = new_error;
 
 		iter++;
 
