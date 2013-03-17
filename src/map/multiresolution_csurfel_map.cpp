@@ -200,7 +200,7 @@ void MultiResolutionColorSurfelMap::ImagePreAllocator::prepare( unsigned int w, 
 	typedef NodeValue* NodeValuePtr;
 	typedef spatialaggregate::OcTreeNode< float, NodeValue >* NodePtr;
 
-	if( !valueMap || height != h ) {
+	if( !valueMap || height != h || width != w ) {
 
 		if( imgKeys )
 			delete[] imgKeys;
