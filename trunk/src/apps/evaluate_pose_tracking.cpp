@@ -299,7 +299,7 @@ public:
 
 		// transform point cloud to reference frame
 		pcl::PointCloud< pcl::PointXYZRGB >::Ptr transformedCloud( new pcl::PointCloud< pcl::PointXYZRGB >() );
-		pcl::transformPointCloud( *cloud, *transformedCloud, referenceTransform_ );
+		pcl::transformPointCloud( *cloud, *transformedCloud, referenceTransform_.cast<float>() );
 
 		// consider image borders
 		std::vector< int > imageBorderIndices;
